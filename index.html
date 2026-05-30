@@ -81,10 +81,10 @@
                     </div>
                 </div>
 
-                <button id="btnLogin" onclick="handleLogin()" class="w-full bg-pink hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition duration-200 flex items-center justify-center space-x-2">
-                    <i data-lucide="key-round" class="w-5 h-5"></i>
-                    <span>เข้าสู่ระบบ</span>
-                </button>
+               <button id="btnLogin" type="button" class="w-full bg-gradient-to-r from-rose-500 to-sky-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg hover:shadow-xl transition duration-200 flex items-center justify-center space-x-2 group">
+    <i data-lucide="key-round" class="w-5 h-5 transition-transform group-hover:scale-110"></i>
+    <span>เข้าสู่ระบบ</span>
+</button>
 
                 <div class="text-center pt-2">
                     <span class="text-xs text-gray-700 block mb-1">เวลาในการลงชื่อปฏิบัติงานไม่เกิน 08.00 น. <br> เวลาลงชื่อออกจากงานตั้งแต่เวลา 16.30 น.</span>
@@ -535,10 +535,17 @@
         }
 
         // ==================== SYSTEM LOOPS / ONLOAD ====================
+        // ==================== SYSTEM LOOPS / ONLOAD ====================
         window.onload = function() {
             lucide.createIcons();
             startClock();
             initGeoLocation();
+
+            // ⚡ ผูกอีเวนต์การคลิกปุ่มล็อกอินผ่านโค้ดสคริปต์โดยตรง ป้องกันปัญหาหาฟังก์ชันไม่เจอ
+            const loginButton = document.getElementById("btnLogin");
+            if (loginButton) {
+                loginButton.addEventListener("click", handleLogin);
+            }
 
             if (!isGAS) {
                 document.getElementById("envWarningBanner").classList.remove("hidden");
