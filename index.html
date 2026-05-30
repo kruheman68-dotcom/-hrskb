@@ -1146,7 +1146,7 @@
         
         
         // เติมพาร์ท URL ของ Google Apps Script Web App (ลงท้ายด้วย /exec ที่ได้จากการ Deploy แบบ Anyone)
-        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyy_-K9tA1IsdUghzro7KwnM85lIDYv3J9CCaCiubfAFKk-HZ9O55usl-Y6HCLmIwry/exec";
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw3FI9TxIuGCFdKItjyh-RgFxOfYjseFTc4QYx_GB82589OnT5o4tn9CK0Hiq64a8FW/exec";
 
         // ตรวจสอบสภาพแวดล้อมว่ารันบน Google Apps Script หรือไม่ (ในที่นี้เราจะบังคับใช้ fetch ไปที่ WEB_APP_URL)
         const isGAS = false; 
@@ -1170,16 +1170,24 @@
         let pendingActionType = null;
 
         // ฟังก์ชันช่วยเรียกข้อมูลข้ามโดเมนไปยัง GAS Backend
+       // ฟังก์ชันช่วยเรียกข้อมูลข้ามโดเมนไปยัง GAS Backend (อัปเดตเพื่อรองรับ CORS)
         function callBackend(actionName, dataPayload = {}) {
+            // แพ็กข้อมูลในรูปแบบฟอร์มสตริงเพื่อเลี่ยง CORS บล็อก
+            const payload = {
+                action: actionName,
+                ...dataPayload
+            };
+
             return fetch(WEB_APP_URL, {
                 method: "POST",
-                body: JSON.stringify({
-                    action: actionName,
-                    ...dataPayload
-                })
+                mode: "cors", // เปิดโหมดแชร์ข้ามไซต์
+                headers: {
+                    "Content-Type": "text/plain;charset=utf-8" // ใช้ text/plain เพื่อเลี่ยง Preflight บล็อก
+                },
+                body: JSON.stringify(payload)
             })
             .then(res => {
-                if (!res.ok) throw new Error("เครือข่ายตอบกลับไม่ถูกต้อง");
+                if (!res.ok) throw new Error("สถานะการเชื่อมต่อเครือข่ายล้มเหลว");
                 return res.json();
             });
         }
