@@ -1140,6 +1140,31 @@
                 toast.style.pointerEvents = "none";
             }, 4000);
         }
+
+const webAppUrl = "https://script.google.com/macros/s/AKfycby8XqHx9cQKYkUqCBTbQqw0jWFJWoqiuCj-a9CDGLSVTh5vY19bmg6OKDqK70dDVx2d/exec";
+
+// ฟังก์ชันสำหรับส่งข้อมูล
+function sendDataToGoogle() {
+  const myData = { name: "John", age: 25 };
+
+  fetch(webAppUrl, {
+    method: "POST", // หรือ 'GET' ตามที่ตั้งไว้ใน Apps Script
+    mode: "no-cors", // จำเป็นต้องใส่เพื่อป้องกันปัญหา CORS สำหรับ Apps Script บางกรณี
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(myData)
+  })
+  .then(response => {
+    alert("ส่งข้อมูลเรียบร้อยแล้ว!");
+  })
+  .catch(error => {
+    console.error("เกิดข้อผิดพลาด:", error);
+  });
+}
+
+
+        
     </script>
 </body>
 </html>
