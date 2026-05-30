@@ -598,17 +598,29 @@
             callBackend("getSystemConfig")
                 .then(config => {
                     systemConfig = config;
+                    
+                    // อัปเดตข้อความแสดงผลหน้าบ้านสำหรับ User
                     document.getElementById('ruleCheckInTime').innerText = config.maxCheckInTime + " น.";
                     document.getElementById('ruleCheckOutTime').innerText = config.allowCheckOutAfter + " น. เป็นต้นไป";
                     
-                    // อัปเดตในหน้าแอดมิน
-                    document.getElementById('systemToggle').checked = config.systemOnline;
-                    document.getElementById('gpsToggle').checked = config.gpsLock;
-                    document.getElementById('setCheckInTime').value = config.maxCheckInTime;
-                    document.getElementById('setCheckOutTime').value = config.allowCheckOutAfter;
-                    document.getElementById('admGpsStatusLabel').innerText = config.gpsLock ? "เปิดใช้งาน" : "ปิดใช้งาน";
+                    // 🌟 [จุดแก้ไข] บังคับให้ช่องกรอกในหน้า Admin แสดงผลและค้างค่าเวลาล่าสุดไว้
+                    if(document.getElementById('setCheckInTime')) {
+                        document.getElementById('setCheckInTime').value = config.maxCheckInTime;
+                    }
+                    if(document.getElementById('setCheckOutTime')) {
+                        document.getElementById('setCheckOutTime').value = config.allowCheckOutAfter;
+                    }
+                    
+                    // อัปเดตสถานะสวิตช์เปิด-ปิดระบบ
+                    if(document.getElementById('systemToggle')) {
+                        document.getElementById('systemToggle').checked = config.systemOnline;
+                    }
+                    if(document.getElementById('gpsToggle')) {
+                        document.getElementById('gpsToggle').checked = config.gpsLock;
+                        document.getElementById('admGpsStatusLabel').innerText = config.gpsLock ? "เปิดใช้งาน" : "ปิดใช้งาน";
+                    }
                 })
-                .catch(err => console.log("ยังดึงคอนฟิกไม่ได้ รอการลงทะเบียนเว็บแอป"));
+                .catch(err => console.log("ยังดึงคอนฟิกไม่ได้ หรือรอเซ็ตอัป Web App URL"));
         }
 
         // ระบบจัดการ GPS Geofencing
@@ -918,13 +930,37 @@
             refreshAdminDashboard();
         }
 
-        function updateBackendConfig() {
+       function updateBackendConfig() {
+            // ดึงค่าล่าสุดจากช่อง Input ที่ Admin เลือก
+            const newCheckIn = document.getElementById('setCheckInTime').value;
+            const newCheckOut = document.getElementById('setCheckOutTime').value;
+
             const updatedConfig = {
                 systemOnline: document.getElementById('systemToggle').checked,
                 gpsLock: document.getElementById('gpsToggle').checked,
-                maxCheckInTime: document.getElementById('setCheckInTime').value,
-                allowCheckOutAfter: document.getElementById('setCheckOutTime').value
+                maxCheckInTime: newCheckIn,
+                allowCheckOutAfter: newCheckOut
             };
+
+            showToast("กำลังบันทึก", "กำลังอัปเดตเงื่อนไขเวลาเข้าคลาวด์...", "gray");
+
+            callBackend("saveSystemConfig", updatedConfig)
+                .then(res => {
+                    if (res.success) {
+                        showToast("บันทึกสำเร็จ", res.message, "emerald");
+                        
+                        // 🌟 [จุดแก้ไข] อัปเดตหน่วยความจำฝั่งหน้าบ้านทันที
+                        systemConfig.maxCheckInTime = newCheckIn;
+                        systemConfig.allowCheckOutAfter = newCheckOut;
+                        
+                        // สั่ง Reload ตัว UI ทั้งหมดเพื่อล็อกค่าเวลาแสดงผลให้ค้างไว้
+                        loadSystemConfig(); 
+                    } else {
+                        showToast("ล้มเหลว", res.message, "rose");
+                    }
+                })
+                .catch(err => showToast("ข้อผิดพลาด", "ไม่สามารถอัปเดตตารางเวลาได้: " + err.message, "rose"));
+        }
 
             callBackend("saveSystemConfig", updatedConfig)
                 .then(res => {
