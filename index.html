@@ -520,7 +520,17 @@
 
 
 
-// ฟังก์ชันล้าง/แปลง ฟอร์แมตเวลาจาก Google Sheets ให้เป็นสตริง HH:mm ที่พร้อมเปรียบเทียบเสมอ
+ // ตัวแปรเก็บพารามิเตอร์ของรายการที่กำลังรอยืนยันจากป๊อปอัป
+        let pendingActionType = null; 
+
+        // ในกรณีรันแบบ Preview ด้านนอก Google Sheets (สร้าง Mock Database เพื่อความลื่นไหลในการทดสอบ)
+        let mockStaffDatabase = {
+            "1234567890123": { name: "คุณครูสวนกุหลาบ นามสกุลดี", role: "ข้าราชการครู", status: "Active", isAdmin: false, leaveDays: 4 },
+            "9999999999999": { name: "ผู้อำนวยการ สวนกุหลาบสระบุรี", role: "ผู้อำนวยการโรงเรียน", status: "Active", isAdmin: true, leaveDays: 2 }
+        };
+        let mockAttendanceRecords = [];
+
+        // ฟังก์ชันล้าง/แปลง ฟอร์แมตเวลาจาก Google Sheets ให้เป็นสตริง HH:mm ที่พร้อมเปรียบเทียบเสมอ
         function formatTimeConfig(timeVal) {
             if (!timeVal) return "08:30";
             
