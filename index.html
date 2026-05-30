@@ -518,6 +518,34 @@
             startGpsTracking();
         };
 
+
+
+// ฟังก์ชันล้าง/แปลง ฟอร์แมตเวลาจาก Google Sheets ให้เป็นสตริง HH:mm ที่พร้อมเปรียบเทียบเสมอ
+        function formatTimeConfig(timeVal) {
+            if (!timeVal) return "08:30";
+            
+            // หากระบบ Sheets คืนมาเป็น Date String (เช่น มี GMT หรือรายละเอียดตัวอักษร)
+            if (typeof timeVal === 'string' && (timeVal.includes('GMT') || timeVal.includes(' '))) {
+                try {
+                    const d = new Date(timeVal);
+                    if (!isNaN(d.getTime())) {
+                        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                    }
+                } catch(e) {}
+            }
+            
+            // ใช้ regex เพื่อดึงเฉพาะกลุ่มตัวเลข hh:mm 
+            const match = String(timeVal).match(/(\d{1,2}):(\d{2})/);
+            if (match) {
+                return `${String(match[1]).padStart(2, '0')}:${match[2]}`;
+            }
+            return "08:30";
+        }
+
+
+
+        
+
         // ฟังก์ชันช่วยเรียกข้อมูลข้ามโดเมนไปยัง GAS Backend (เลี่ยง CORS บล็อก)
         function callBackend(actionName, dataPayload = {}) {
             const payload = {
