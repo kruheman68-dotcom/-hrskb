@@ -483,7 +483,7 @@
 
     
     <script>
-        // ตรวจสอบสภาพแวดล้อมว่ารันบน Google Apps Script หรือไม่
+      // ตรวจสอบสภาพแวดล้อมว่ารันบน Google Apps Script หรือไม่
         const isGAS = typeof google !== 'undefined' && google.script && google.script.run;
 
         // โครงสร้าง Config เริ่มต้นของระบบ
@@ -534,52 +534,6 @@
             return "08:30";
         }
 
-
-// เพิ่มฟังก์ชันนี้ไว้ใน <script> ของ index.html เพื่อรองรับการเรียกใช้ showToast()
-function showToast(type, title, msg) {
-    // ดึง Element ของ Toast ขึ้นมาตาม ID หรือคลาสที่คุณตั้งไว้
-    const toast = document.getElementById("toast"); // หรือตามชื่อ ID จริงในหน้าเว็บของคุณ
-    const toastIcon = document.getElementById("toastIcon");
-    const toastTitle = document.getElementById("toastTitle");
-    const toastMsg = document.getElementById("toastMsg");
-
-    if (!toast) return; // ป้องกันข้อผิดพลาดถ้าหา Element ไม่เจอ
-
-    // จัดการเปลี่ยนสีและไอคอนตามประเภท (type)
-    if (type === "success") {
-        toastIcon.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6 text-emerald-500"></i>`;
-        toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 max-w-sm border-l-4 border-emerald-500";
-    } else if (type === "warning") {
-        toastIcon.innerHTML = `<i data-lucide="alert-triangle" class="w-6 h-6 text-amber-500"></i>`;
-        toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 max-w-sm border-l-4 border-amber-500";
-    } else if (type === "error") {
-        toastIcon.innerHTML = `<i data-lucide="x-circle" class="w-6 h-6 text-rose-500"></i>`;
-        toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 max-w-sm border-l-4 border-rose-500";
-    } else {
-        toastIcon.innerHTML = `<i data-lucide="info" class="w-6 h-6 text-sky-400"></i>`;
-        toast.className = "fixed bottom-5 right-5 z-50 transform translate-y-0 opacity-100 transition-all duration-300 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3 max-w-sm border-l-4 border-sky-500";
-    }
-
-    toastTitle.innerText = title;
-    toastMsg.innerText = msg;
-    
-    // อัปเดตไอคอนของ Lucide
-    if (typeof lucide !== 'undefined') {
-        lucide.createIcons();
-    }
-
-    // แสดงผลและตั้งเวลาซ่อนอัตโนมัติ (เช่น 3 วินาที)
-    toast.style.display = "flex"; 
-    toast.style.opacity = "1";
-    
-    setTimeout(() => {
-        toast.style.opacity = "0";
-        setTimeout(() => { toast.style.display = "none"; }, 300);
-    }, 3000);
-}
-
-
-        
         // ==================== SYSTEM LOOPS / ONLOAD ====================
         window.onload = function() {
             lucide.createIcons();
@@ -713,39 +667,14 @@ function showToast(type, title, msg) {
         }
 
         // ==================== AUTHENTICATION (LOGIN) ====================
-
-
-
-        
-       const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzEc_bqmCBpSC7J5Qi-7o7K-uRZK4_MgHoX2UIVgRqA1PeYg-4rvNb7sbBbHbKWddra/exec";
-
-// ตัวอย่างฟังก์ชัน Login ใหม่สำหรับใช้งานบน GitHub Pages
-function handleLogin() {
-    const idCard = document.getElementById("idCardInput").value;
-
-    // แสดงสถานะกำลังโหลด...
-    showLoadingToast("กำลังตรวจสอบข้อมูล...");
-
-    fetch(WEB_APP_URL, {
-        method: "POST",
-        body: JSON.stringify({
-            action: "checkLogin",
-            idCard: idCard
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // ทำงานเมื่อล็อกอินสำเร็จตามอัลกอริทึมเดิมของคุณ
-            renderUserDashboard(data.user);
-        } else {
-            showToast("error", "เข้าสู่ระบบไม่สำเร็จ", data.message);
-        }
-    })
-    .catch(error => {
-        showToast("error", "ข้อผิดพลาดระบบ", "ไม่สามารถเชื่อมต่อฐานข้อมูลคลาวด์ได้");
-    });
-}
+        function handleLogin() {
+            const idCard = document.getElementById("idCardInput").value.trim();
+            const btnLogin = document.getElementById("btnLogin");
+            
+            if (idCard.length !== 13 || isNaN(idCard)) {
+                showToast("ข้อมูลไม่ถูกต้อง", "กรุณาระบุเลขบัตรประชาชนให้ครบ 13 หลัก", "warning");
+                return;
+            }
 
             btnLogin.disabled = true;
             btnLogin.innerHTML = `<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> <span>กำลังตรวจสอบ...</span>`;
@@ -897,14 +826,12 @@ function handleLogin() {
         }
 
         // ==================== TRIGGER CONFIRMATION MODAL ====================
-        // ฟังก์ชันเมื่อคลิกปุ่มลงเวลา จะเปิดป๊อปอัปเพื่อให้กดยืนยันก่อนทำรายการจริง
         function triggerRecordConfirmation(actionType) {
             if (!systemConfig.online) {
                 showToast("ไม่สำเร็จ", "ผู้ดูแลระบบได้สั่งปิดระบบลงทะเบียนชั่วคราว", "error");
                 return;
             }
 
-            // ตรวจสอบความต้องการเบื้องต้นในเรื่อง GPS ก่อนจะให้กดยืนยัน
             if (systemConfig.gpsLock) {
                 if (!currentUserCoords) {
                     showToast("กรุณาเปิด GPS", "ระบบล็อกพิกัดจำกัดขอบเขต กรุณาเปิดระบบระบุตำแหน่งของอุปกรณ์คุณก่อนทำรายการ", "warning");
@@ -917,7 +844,6 @@ function handleLogin() {
                 }
             }
 
-            // บันทึกชนิดรายการรอการกดยอมรับ
             pendingActionType = actionType;
 
             const modal = document.getElementById("confirmActionModal");
@@ -928,7 +854,6 @@ function handleLogin() {
             const icon = document.getElementById("confirmIcon");
             const btnSubmit = document.getElementById("btnConfirmSubmit");
 
-            // อัปเดต UI ภายในป๊อปอัปยืนยันตามประเภทงาน
             if (actionType === "check-in") {
                 title.innerText = "ยืนยันการลงชื่อเข้างาน";
                 message.innerText = "คุณต้องการบันทึกเวลา 'เข้างาน' (Check-In) ใช่หรือไม่?";
@@ -945,12 +870,10 @@ function handleLogin() {
 
             lucide.createIcons();
 
-            // เปิดแสดงป๊อปอัปพร้อมแอนิเมชันสวยงาม
             modal.classList.remove("pointer-events-none", "opacity-0");
             modalBox.classList.remove("scale-90");
         }
 
-        // ปิดป๊อปอัปยืนยัน
         function closeConfirmationModal() {
             const modal = document.getElementById("confirmActionModal");
             const modalBox = document.getElementById("confirmModalBox");
@@ -960,18 +883,16 @@ function handleLogin() {
             pendingActionType = null;
         }
 
-        // เมื่อกดยืนยัน (ตกลง) บนป๊อปอัป
         function executeConfirmedAction() {
             if (pendingActionType) {
                 const actionToRun = pendingActionType;
-                closeConfirmationModal(); // ปิดหน้าต่างลงบันทึก
-                recordTime(actionToRun); // รันคำสั่งบันทึกเวลาจริงตามเส้นทางเดิม
+                closeConfirmationModal(); 
+                recordTime(actionToRun); 
             }
         }
 
         // ==================== TIME RECORDING SERVICE ====================
         function recordTime(actionType) {
-            // เพื่อความปลอดภัย: ดึงและเปรียบเทียบค่าตั้งค่าระบบล่าสุดจากฐานข้อมูลโดยตรง ก่อนจะทำการประมวลผลเซฟประวัติลงเวลา
             if (isGAS) {
                 google.script.run.withSuccessHandler(function(configFromSheet) {
                     systemConfig.online = configFromSheet.systemOnline !== false;
@@ -979,18 +900,14 @@ function handleLogin() {
                     systemConfig.maxCheckInTime = formatTimeConfig(configFromSheet.maxCheckInTime || "08:30");
                     systemConfig.allowCheckOutAfter = formatTimeConfig(configFromSheet.allowCheckOutAfter || "16:30");
                     
-                    // อัปเดต UI ปัจจุบันให้ตรงกับฐานข้อมูลล่าสุด
                     loadSystemConfigFromResponse(systemConfig);
-
-                    // ดำเนินการขั้นตอนการลงบันทึกจริงด้วย config ล่าสุด
                     proceedWithRecordTime(actionType);
                 }).getSystemConfig();
             } else {
-                proceedWithRecordTime(actionType);
+                networkMode = proceedWithRecordTime(actionType);
             }
         }
 
-        // ฟังก์ชันประมวลผลการลงบันทึกเวลาจริงที่ได้รับการอัปเดต Config ตรงกับฐานข้อมูลแล้ว
         function proceedWithRecordTime(actionType) {
             if (!systemConfig.online) {
                 showToast("ไม่สำเร็จ", "ผู้ดูแลระบบได้สั่งปิดระบบลงทะเบียนชั่วคราว", "error");
@@ -1014,7 +931,6 @@ function handleLogin() {
             const dateStr = now.toLocaleDateString('th-TH');
             const coordsStr = currentUserCoords ? `${currentUserCoords.lat.toFixed(6)}, ${currentUserCoords.lng.toFixed(6)}` : "ไม่ได้ตรวจสอบพิกัด";
 
-            // เปรียบเทียบกับเงื่อนเวลาสูงสุดจากฐานข้อมูลเพื่อระบุสถานะ 'สาย'
             const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
             let checkStatus = "ตรงเวลา";
             if (actionType === 'check-in' && currentHourMin > systemConfig.maxCheckInTime) {
@@ -1042,7 +958,6 @@ function handleLogin() {
                     }
                 }).recordAttendance(attendancePayload);
             } else {
-                // โหมด Preview จำลองการตอบสนอง
                 let recordFound = mockAttendanceRecords.find(r => r.idCard === currentUser.idCard && r.date === dateStr);
                 if (actionType === 'check-in') {
                     if (recordFound && recordFound.checkIn !== "-") {
@@ -1081,7 +996,6 @@ function handleLogin() {
             if (isGAS) {
                 google.script.run.withSuccessHandler(function(records) {
                     renderAdminTable(records);
-                    // อัปเดตตัวเลขรวม
                     google.script.run.withSuccessHandler(function(configFromSheet) {
                         systemConfig.online = configFromSheet.systemOnline !== false;
                         systemConfig.gpsLock = configFromSheet.gpsLock !== false;
@@ -1125,7 +1039,6 @@ function handleLogin() {
             document.getElementById("admLateToday").innerText = records.filter(r => r.status === "สาย").length;
         }
 
-        // อัปเดตการตั้งค่าระบบและบันทึกขึ้น Google Sheets ทันที
         function updateBackendConfig() {
             systemConfig.online = document.getElementById("systemToggle").checked;
             systemConfig.gpsLock = document.getElementById("gpsToggle").checked;
@@ -1187,7 +1100,7 @@ function handleLogin() {
             const toastMsg = document.getElementById("toastMsg");
             const toastIcon = document.getElementById("toastIcon");
 
-            toastIcon.className = "p-1 rounded-full";
+            if (!toast) return;
 
             if (type === "success") {
                 toastIcon.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6 text-emerald-400"></i>`;
