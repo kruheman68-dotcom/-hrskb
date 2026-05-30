@@ -484,7 +484,11 @@
     
     <script>
       // ตรวจสอบสภาพแวดล้อมว่ารันบน Google Apps Script หรือไม่
-        const isGAS = typeof google !== 'undefined' && google.script && google.script.run;
+        // เปลี่ยนเป็น true เพื่อบังคับให้ระบบเลิกใช้ตัวจำลอง และหันมาติดต่อข้อมูลจริงผ่านเครือข่าย API
+const isGAS = true; 
+
+// วาง URL ของ Google Web App (ที่ได้จากการ Deploy ในขั้นตอนที่ 1) ไว้ที่นี่
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbyxkBbfV72WJlPxUlPmMOMZ8v7Y5zvF3EzCa5f4VPxSj-NVLmB76RNgZewJFvIRrt9B/exec";
 
         // โครงสร้าง Config เริ่มต้นของระบบ
         let systemConfig = {
@@ -674,50 +678,45 @@
         }
 
         // ==================== AUTHENTICATION (LOGIN) ====================
-        function handleLogin() {
-            const idCard = document.getElementById("idCardInput").value.trim();
-            const btnLogin = document.getElementById("btnLogin");
-            
-            if (idCard.length !== 13 || isNaN(idCard)) {
-                showToast("ข้อมูลไม่ถูกต้อง", "กรุณาระบุเลขบัตรประชาชนให้ครบ 13 หลัก", "warning");
-                return;
-            }
+       function handleLogin() {
+    const idCard = document.getElementById("idCardInput").value.trim();
+    const btnLogin = document.getElementById("btnLogin");
+    
+    if (idCard.length !== 13 || isNaN(idCard)) {
+        showToast("ข้อมูลไม่ถูกต้อง", "กรุณาระบุเลขบัตรประชาชนให้ครบ 13 หลัก", "warning");
+        return;
+    }
 
-            btnLogin.disabled = true;
-            btnLogin.innerHTML = `<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> <span>กำลังตรวจสอบ...</span>`;
-            lucide.createIcons();
+    btnLogin.disabled = true;
+    btnLogin.innerHTML = `<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> <span>กำลังตรวจสอบ...</span>`;
+    lucide.createIcons();
 
-            if (isGAS) {
-                // ดึงข้อมูลจริงจากระบบ Google Sheets
-                google.script.run.withSuccessHandler(function(response) {
-                    btnLogin.disabled = false;
-                    btnLogin.innerHTML = `<i data-lucide="key-round" class="w-5 h-5"></i> <span>เข้าสู่ระบบ</span>`;
-                    lucide.createIcons();
+    // 🌐 ยิงคำสั่งเข้าหลังบ้าน Google Sheets ตรงๆ ผ่าน URL (รองรับรันบน GitHub)
+    fetch(BACKEND_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "checkLogin", idCard: idCard })
+    })
+    .then(res => res.json())
+    .then(response => {
+        btnLogin.disabled = false;
+        btnLogin.innerHTML = `<i data-lucide="key-round" class="w-5 h-5"></i> <span>เข้าสู่ระบบ</span>`;
+        lucide.createIcons();
 
-                    if (response.success) {
-                        currentUser = response.user;
-                        proceedToDashboard();
-                    } else {
-                        showToast("ไม่สามารถเข้าสู่ระบบได้", response.message, "error");
-                    }
-                }).checkLogin(idCard);
-            } else {
-                // หากกำลังเทสหน้าบ้านแบบพรีวิว
-                setTimeout(() => {
-                    btnLogin.disabled = false;
-                    btnLogin.innerHTML = `<i data-lucide="key-round" class="w-5 h-5"></i> <span>เข้าสู่ระบบ</span>`;
-                    lucide.createIcons();
-
-                    if (mockStaffDatabase[idCard]) {
-                        currentUser = mockStaffDatabase[idCard];
-                        currentUser.idCard = idCard;
-                        proceedToDashboard();
-                    } else {
-                        showToast("ไม่พบผู้ใช้ในระบบจำลอง", "กรุณาใช้ 1234567890123 หรือ 9999999999999", "error");
-                    }
-                }, 800);
-            }
+        if (response.success) {
+            currentUser = response.user;
+            currentUser.idCard = idCard; // ผูกไอดีเอาไว้ใช้งานต่อ
+            proceedToDashboard();
+        } else {
+            showToast("ไม่สามารถเข้าสู่ระบบได้", response.message, "error");
         }
+    })
+    .catch(err => {
+        btnLogin.disabled = false;
+        btnLogin.innerHTML = `<i data-lucide="key-round" class="w-5 h-5"></i> <span>เข้าสู่ระบบ</span>`;
+        lucide.createIcons();
+        showToast("เครือข่ายมีปัญหา", "ไม่สามารถติดต่อ Google Sheets API ได้", "error");
+    });
+}
 
         function proceedToDashboard() {
             document.getElementById("loginPage").classList.add("hidden");
@@ -759,23 +758,25 @@
         }
 
         // ==================== USER / ADMIN DATA REFRESH ====================
-        function getUserAttendanceHistory() {
-            document.getElementById("userWelcomeName").innerText = currentUser.name;
-            document.getElementById("userRoleBadge").innerText = `ตำแหน่ง: ${currentUser.role}`;
-            document.getElementById("userIdCardSpan").innerText = `${currentUser.idCard.substring(0,3)}-xxxx-xx-${currentUser.idCard.substring(11,13)}`;
+       function getUserAttendanceHistory() {
+    document.getElementById("userWelcomeName").innerText = currentUser.name;
+    document.getElementById("userRoleBadge").innerText = `ตำแหน่ง: ${currentUser.role}`;
+    document.getElementById("userIdCardSpan").innerText = `${currentUser.idCard.substring(0,3)}-xxxx-xx-${currentUser.idCard.substring(11,13)}`;
 
-            const historyBody = document.getElementById("userHistoryTableBody");
-            
-            if (isGAS) {
-                google.script.run.withSuccessHandler(function(records) {
-                    const userLogs = records.filter(r => r.idCard === currentUser.idCard);
-                    renderUserHistoryTable(userLogs);
-                }).getAttendanceRecordsToday();
-            } else {
-                const userLogs = mockAttendanceRecords.filter(r => r.idCard === currentUser.idCard);
-                renderUserHistoryTable(userLogs);
-            }
-        }
+    // ยิงไปดึงข้อมูลจริงจาก Spreadsheet มาแสดงผล
+    fetch(BACKEND_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "getAttendanceRecordsToday" })
+    })
+    .then(res => res.json())
+    .then(records => {
+        const userLogs = records.filter(r => r.idCard === currentUser.idCard);
+        renderUserHistoryTable(userLogs);
+    })
+    .catch(err => {
+        showToast("ดึงประวัติล้มเหลว", "ไม่สามารถอ่านประวัติการลงเวลาทำงานได้", "error");
+    });
+}
 
         function renderUserHistoryTable(userLogs) {
             const historyBody = document.getElementById("userHistoryTableBody");
