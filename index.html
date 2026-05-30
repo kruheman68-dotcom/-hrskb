@@ -1141,28 +1141,476 @@
             }, 4000);
         }
 
-const webAppUrl = "https://script.google.com/macros/s/AKfycbxbcojmcnwVF_mlmGkPX-aPyVLbH9Hv5mo74BvUU2YoGNI9uZfYWtQXn8BafLFnJPlr/exec";
 
-// ฟังก์ชันสำหรับส่งข้อมูล
-function sendDataToGoogle() {
-  const myData = { name: "John", age: 25 };
+        
+        
+        
+        // เติมพาร์ท URL ของ Google Apps Script Web App (ลงท้ายด้วย /exec ที่ได้จากการ Deploy แบบ Anyone)
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyy_-K9tA1IsdUghzro7KwnM85lIDYv3J9CCaCiubfAFKk-HZ9O55usl-Y6HCLmIwry/exec";
 
-  fetch(webAppUrl, {
-    method: "POST", // หรือ 'GET' ตามที่ตั้งไว้ใน Apps Script
-    mode: "no-cors", // จำเป็นต้องใส่เพื่อป้องกันปัญหา CORS สำหรับ Apps Script บางกรณี
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(myData)
-  })
-  .then(response => {
-    alert("ส่งข้อมูลเรียบร้อยแล้ว!");
-  })
-  .catch(error => {
-    console.error("เกิดข้อผิดพลาด:", error);
-  });
-}
+        // ตรวจสอบสภาพแวดล้อมว่ารันบน Google Apps Script หรือไม่ (ในที่นี้เราจะบังคับใช้ fetch ไปที่ WEB_APP_URL)
+        const isGAS = false; 
 
+        // โครงสร้าง Config เริ่มต้นของระบบ
+        let systemConfig = {
+            systemOnline: true,
+            gpsLock: true,
+            maxCheckInTime: "08:30",
+            allowCheckOutAfter: "16:30"
+        };
+
+        // พิกัดภูมิศาสตร์ของ ส.ก.บ. (สระบุรี)
+        const schoolCoords = { lat: 14.542031, lng: 100.871142 };
+        const allowedRadiusMeters = 100;
+
+        let currentUser = null;
+        let currentUserCoords = null;
+        let currentDistance = null;
+        let isGpsSearching = false;
+        let pendingActionType = null;
+
+        // ฟังก์ชันช่วยเรียกข้อมูลข้ามโดเมนไปยัง GAS Backend
+        function callBackend(actionName, dataPayload = {}) {
+            return fetch(WEB_APP_URL, {
+                method: "POST",
+                body: JSON.stringify({
+                    action: actionName,
+                    ...dataPayload
+                })
+            })
+            .then(res => {
+                if (!res.ok) throw new Error("เครือข่ายตอบกลับไม่ถูกต้อง");
+                return res.json();
+            });
+        }
+
+        // เริ่มต้นระบบเมื่อเปิดหน้าเว็บ
+        window.onload = function() {
+            lucide.createIcons();
+            initClock();
+            loadSystemConfig();
+            startGpsTracking();
+        };
+
+        // 1. ระบบนาฬิกา Real-time
+        function initClock() {
+            const days = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
+            const months = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+            
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('liveClock').innerText = now.toTimeString().split(' ')[0];
+                document.getElementById('liveDate').innerText = `${days[now.getDay()]}ที่ ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear() + 543}`;
+                
+                // เปิด/ปิดปุ่มตามเงื่อนเวลาสำหรับพนักงานที่ล็อกอินอยู่
+                if (currentUser) {
+                    checkTimeRules();
+                }
+            }, 1000);
+        }
+
+        // 2. ดึงคอนฟิกของระบบ
+        function loadSystemConfig() {
+            callBackend("getSystemConfig")
+                .then(config => {
+                    systemConfig = config;
+                    document.getElementById('ruleCheckInTime').innerText = config.maxCheckInTime + " น.";
+                    document.getElementById('ruleCheckOutTime').innerText = config.allowCheckOutAfter + " น. เป็นต้นไป";
+                    
+                    // อัปเดตในหน้าแอดมิน
+                    document.getElementById('systemToggle').checked = config.systemOnline;
+                    document.getElementById('gpsToggle').checked = config.gpsLock;
+                    document.getElementById('setCheckInTime').value = config.maxCheckInTime;
+                    document.getElementById('setCheckOutTime').value = config.allowCheckOutAfter;
+                    document.getElementById('admGpsStatusLabel').innerText = config.gpsLock ? "เปิดใช้งาน" : "ปิดใช้งาน";
+                })
+                .catch(err => showToast("ข้อผิดพลาด", "ไม่สามารถโหลดค่าระบบได้: " + err.message, "rose"));
+        }
+
+        // 3. ระบบจัดการ GPS Geofencing
+        function startGpsTracking() {
+            if (!navigator.geolocation) {
+                updateGpsUI("ไม่รองรับ GPS", "เบราว์เซอร์นี้ไม่สนับสนุนพิกัด", "text-rose-600");
+                return;
+            }
+
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    currentUserCoords = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    const accuracy = position.coords.accuracy.toFixed(1);
+                    document.getElementById('gpsAccuracy').innerText = `แม่นยำ ±${accuracy} ม.`;
+
+                    document.getElementById('userCurrentCoords').innerText = `${currentUserCoords.lat.toFixed(5)}, ${currentUserCoords.lng.toFixed(5)}`;
+                    
+                    // คำนวณระยะห่าง
+                    currentDistance = calculateDistance(currentUserCoords.lat, currentUserCoords.lng, schoolCoords.lat, schoolCoords.lng);
+                    document.getElementById('userDistanceVal').innerText = `${currentDistance.toFixed(0)} เมตร`;
+
+                    if (systemConfig.gpsLock) {
+                        if (currentDistance <= allowedRadiusMeters) {
+                            updateGpsUI("อยู่ในขอบเขต", "พร้อมบันทึกเวลา", "text-emerald-600");
+                        } else {
+                            updateGpsUI("นอกขอบเขตโรงเรียน", `ห่างออกไป ${currentDistance.toFixed(0)} ม.`, "text-rose-600");
+                        }
+                    } else {
+                        updateGpsUI("ปิดระบบล็อกพิกัด", "บันทึกที่ใดก็ได้", "text-blue");
+                    }
+                },
+                (error) => {
+                    updateGpsUI("พิกัดขัดข้อง", "กรุณาเปิดสิทธิ์เข้าถึง GPS", "text-amber-600");
+                },
+                { enableHighAccuracy: true, maximumAge: 10000 }
+            );
+        }
+
+        function updateGpsUI(status, info, colorClass) {
+            const el = document.getElementById('userGpsStatus');
+            el.className = `font-semibold ${colorClass}`;
+            el.innerText = status;
+        }
+
+        // สูตรคำนวณระยะทางบนผิวโลก (Haversine Formula)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // รัศมีโลกในหน่วยเมตร
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // 4. การจัดการระบบการเข้าสู่ระบบ (Login / Logout)
+        function handleLogin() {
+            const idCard = document.getElementById('idCardInput').value.trim();
+            if (idCard.length !== 13 || isNaN(idCard)) {
+                showToast("แจ้งเตือน", "กรุณากรอกเลขบัตรประชาชนให้ครบ 13 หลัก", "amber");
+                return;
+            }
+
+            const btn = document.getElementById('btnLogin');
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="refresh-cw" class="w-5 h-5 animate-spin"></i> <span>กำลังตรวจสอบ...</span>`;
+            lucide.createIcons();
+
+            callBackend("checkLogin", { idCard: idCard })
+                .then(res => {
+                    if (res.success) {
+                        currentUser = res.user;
+                        showToast("สำเร็จ", "เข้าสู่ระบบเรียบร้อยแล้ว", "emerald");
+                        setupUserDashboard();
+                    } else {
+                        showToast("ไม่สำเร็จ", res.message, "rose");
+                        resetLoginButton();
+                    }
+                })
+                .catch(err => {
+                    showToast("ผิดพลาด", "การเชื่อมต่อเซิร์ฟเวอร์ล้มเหลว", "rose");
+                    resetLoginButton();
+                });
+        }
+
+        function resetLoginButton() {
+            const btn = document.getElementById('btnLogin');
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="key-round" class="w-5 h-5"></i> <span>เข้าสู่ระบบ</span>`;
+            lucide.createIcons();
+        }
+
+        function setupUserDashboard() {
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('userInfoHeader').classList.remove('hidden');
+            document.getElementById('headerUserName').innerText = currentUser.name;
+            
+            // สลับการมองเห็นตามบทบาท
+            if (currentUser.isAdmin) {
+                switchView('admin');
+                refreshAdminDashboard();
+            } else {
+                switchView('user');
+            }
+
+            document.getElementById('userWelcomeName').innerText = currentUser.name;
+            document.getElementById('userRoleBadge').innerText = "ตำแหน่ง: " + currentUser.role;
+            document.getElementById('userIdCardSpan').innerText = currentUser.idCard.substring(0,3) + "-XXXX-" + currentUser.idCard.substring(9,13);
+            document.getElementById('statLeave').innerText = currentUser.leaveDays;
+
+            fetchUserHistory();
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('userInfoHeader').classList.add('hidden');
+            document.getElementById('userPage').classList.add('hidden');
+            document.getElementById('adminPage').classList.add('hidden');
+            document.getElementById('loginPage').classList.remove('hidden');
+            document.getElementById('idCardInput').value = "";
+            resetLoginButton();
+            showToast("ออกจากระบบ", "เซสชันของคุณสิ้นสุดลงแล้ว", "gray");
+        }
+
+        function switchView(view) {
+            if (view === 'admin') {
+                document.getElementById('userPage').classList.add('hidden');
+                document.getElementById('adminPage').classList.remove('hidden');
+            } else {
+                document.getElementById('adminPage').classList.add('hidden');
+                document.getElementById('userPage').classList.remove('hidden');
+            }
+        }
+
+        // 5. ข้อกำหนดและตรวจสอบการกดลงชื่อเข้างาน / ออกงาน
+        function checkTimeRules() {
+            const now = new Date();
+            const timeString = now.toTimeString().split(' ')[0].substring(0,5); // "HH:MM"
+            
+            // จัดการปุ่ม Check-Out
+            const btnCheckOut = document.getElementById('btnCheckOut');
+            if (timeString >= systemConfig.allowCheckOutAfter) {
+                btnCheckOut.disabled = false;
+                btnCheckOut.className = "w-full bg-pink text-white hover:bg-rose-700 py-4 px-4 rounded-2xl shadow-md font-bold text-lg transition flex items-center justify-center space-x-3";
+                document.getElementById('ruleCheckOutWarning').classList.add('hidden');
+            } else {
+                btnCheckOut.disabled = true;
+                btnCheckOut.className = "w-full bg-gray-300 text-gray-500 cursor-not-allowed py-4 px-4 rounded-2xl font-bold text-lg transition flex items-center justify-center space-x-3";
+                document.getElementById('ruleCheckOutWarning').classList.remove('hidden');
+            }
+        }
+
+        function triggerRecordConfirmation(actionType) {
+            if (!systemConfig.systemOnline) {
+                showToast("ระบบปิด", "ขณะนี้ระบบปิดรับการลงเวลาชั่วคราว", "rose");
+                return;
+            }
+
+            if (systemConfig.gpsLock && (currentDistance === null || currentDistance > allowedRadiusMeters)) {
+                showToast("ปฏิเสธคำขอ", "คุณอยู่นอกพื้นที่พิกัดรัศมีของโรงเรียน ไม่สามารถลงเวลาได้", "rose");
+                return;
+            }
+
+            pendingActionType = actionType;
+            const isCheckIn = actionType === 'check-in';
+            
+            // ตกแต่งสไตล์ป๊อปอัปให้สอดคล้องกับฟังก์ชันที่จะทำ
+            document.getElementById('confirmModalTitle').innerText = isCheckIn ? "ยืนยันลงชื่อเข้างาน" : "ยืนยันลงชื่อออกจากงาน";
+            document.getElementById('confirmModalMessage').innerText = isCheckIn ? "คุณกำลังบันทึกเวลาเข้าสถาบันในขณะนี้ ใช่หรือไม่?" : "คุณต้องการสิ้นสุดการปฏิบัติงานและลงบันทึกเวลาออก ใช่หรือไม่?";
+            
+            const iconWrapper = document.getElementById('confirmIconWrapper');
+            const submitBtn = document.getElementById('btnConfirmSubmit');
+            
+            if (isCheckIn) {
+                iconWrapper.className = "inline-flex p-4 rounded-full mb-4 bg-blue-50 text-blue-600";
+                submitBtn.className = "w-full bg-blue hover:bg-blue-hover text-white font-semibold py-2.5 px-4 rounded-xl transition duration-200 text-sm shadow-md";
+                document.getElementById('confirmIcon').setAttribute('data-lucide', 'log-in');
+            } else {
+                iconWrapper.className = "inline-flex p-4 rounded-full mb-4 bg-rose-50 text-rose-600";
+                submitBtn.className = "w-full bg-pink hover:bg-rose-700 text-white font-semibold py-2.5 px-4 rounded-xl transition duration-200 text-sm shadow-md";
+                document.getElementById('confirmIcon').setAttribute('data-lucide', 'log-out');
+            }
+            
+            lucide.createIcons();
+            
+            // แสดงผล Modal
+            const modal = document.getElementById('confirmActionModal');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            document.getElementById('confirmModalBox').classList.remove('scale-90');
+        }
+
+        function closeConfirmationModal() {
+            const modal = document.getElementById('confirmActionModal');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            document.getElementById('confirmModalBox').classList.add('scale-90');
+            pendingActionType = null;
+        }
+
+        function executeConfirmedAction() {
+            if (!pendingActionType) return;
+
+            const now = new Date();
+            const currentTimeStr = now.toTimeString().split(' ')[0].substring(0,5);
+            let statusWork = "ตรงเวลา";
+
+            if (pendingActionType === "check-in" && currentTimeStr > systemConfig.maxCheckInTime) {
+                statusWork = "สาย";
+            }
+
+            const attendancePayload = {
+                idCard: currentUser.idCard,
+                name: currentUser.name,
+                type: currentUser.role,
+                actionType: pendingActionType,
+                time: currentTimeStr,
+                coords: document.getElementById('userCurrentCoords').innerText,
+                status: statusWork
+            };
+
+            closeConfirmationModal();
+            showToast("ส่งข้อมูล", "กำลังบันทึกข้อมูลคลาวด์...", "gray");
+
+            callBackend("recordAttendance", { data: attendancePayload })
+                .then(res => {
+                    if (res.success) {
+                        showToast("สำเร็จ", res.message, "emerald");
+                        fetchUserHistory();
+                        if (currentUser.isAdmin) refreshAdminDashboard();
+                    } else {
+                        showToast("ผิดพลาด", res.message, "rose");
+                    }
+                })
+                .catch(err => showToast("ขัดข้อง", "ไม่สามารถส่งบันทึกได้: " + err.message, "rose"));
+        }
+
+        // 6. การดึงข้อมูลประวัติ (User History)
+        function fetchUserHistory() {
+            callBackend("getAttendanceRecordsToday")
+                .then(records => {
+                    const tbody = document.getElementById('userHistoryTableBody');
+                    tbody.innerHTML = "";
+                    
+                    // กรองเฉพาะข้อมูลของผู้ใช้นี้
+                    const myRecords = records.filter(r => r.idCard === currentUser.idCard);
+                    
+                    let onTimeCount = 0;
+                    let lateCount = 0;
+
+                    if (myRecords.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">วันนี้คุณยังไม่มีการบันทึกเวลาทำงาน</td></tr>`;
+                        return;
+                    }
+
+                    myRecords.forEach(r => {
+                        if (r.status === "ตรงเวลา") onTimeCount++;
+                        if (r.status === "สาย") lateCount++;
+
+                        const badgeClass = r.status === "ตรงเวลา" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800";
+                        
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-gray-50/50">
+                                <td class="px-4 py-3 font-medium">${r.date}</td>
+                                <td class="px-4 py-3 text-blue-600 font-semibold">${r.checkIn}</td>
+                                <td class="px-4 py-3 text-rose-600 font-semibold">${r.checkOut}</td>
+                                <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${r.status}</span></td>
+                                <td class="px-4 py-3 text-xs text-gray-500 break-all">${r.coords}</td>
+                            </tr>
+                        `;
+                    });
+
+                    document.getElementById('statOnTime').innerText = onTimeCount;
+                    document.getElementById('statLate').innerText = lateCount;
+                })
+                .catch(err => console.error("ประวัติขัดข้อง: ", err));
+        }
+
+        // 7. ส่วนควบคุมของ Admin Console
+        function refreshAdminDashboard() {
+            callBackend("getAttendanceRecordsToday")
+                .then(records => {
+                    const tbody = document.getElementById('adminRecordsTable');
+                    tbody.innerHTML = "";
+
+                    document.getElementById('admCheckInToday').innerText = records.length;
+                    document.getElementById('admLateToday').innerText = records.filter(r => r.status === "สาย").length;
+                    
+                    if (records.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">ยังไม่มีบุคลากรมาลงเวลาในวันนี้</td></tr>`;
+                        return;
+                    }
+
+                    records.forEach(r => {
+                        const badgeClass = r.status === "ตรงเวลา" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800";
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 font-semibold text-gray-800">${r.name}<br><span class="text-xs font-normal text-gray-400">${r.type}</span></td>
+                                <td class="px-4 py-3 text-blue-600 font-bold">${r.checkIn}</td>
+                                <td class="px-4 py-3 text-rose-600 font-bold">${r.checkOut}</td>
+                                <td class="px-4 py-3 text-xs tracking-tight text-gray-500">${r.coords}</td>
+                                <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-bold ${badgeClass}">${r.status}</span></td>
+                            </tr>
+                        `;
+                    });
+                });
+                
+            // จำลองแสดงยอดบุคลากรเพื่อความสวยงามในหน้ารายงาน
+            document.getElementById('admTotalStaff').innerText = "กำลังซิงก์...";
+            setTimeout(() => document.getElementById('admTotalStaff').innerText = "มีผลใช้งาน", 1200);
+        }
+
+        function refreshDatabase() {
+            showToast("รีเฟรช", "กำลังดึงข้อมูลเรียงแถวล่าสุด...", "gray");
+            refreshAdminDashboard();
+        }
+
+        function updateBackendConfig() {
+            const updatedConfig = {
+                systemOnline: document.getElementById('systemToggle').checked,
+                gpsLock: document.getElementById('gpsToggle').checked,
+                maxCheckInTime: document.getElementById('setCheckInTime').value,
+                allowCheckOutAfter: document.getElementById('setCheckOutTime').value
+            };
+
+            callBackend("saveSystemConfig", updatedConfig)
+                .then(res => {
+                    if (res.success) {
+                        showToast("บันทึกตาราง", res.message, "emerald");
+                        loadSystemConfig();
+                    }
+                })
+                .catch(err => showToast("ข้อผิดพลาด", "ไม่สามารถอัปเดตระบบได้", "rose"));
+        }
+
+        function autoInitDatabase() {
+            if(!confirm("คุณต้องการสร้างแผ่นงานเริ่มต้นลงใน Google Sheets ของโรงเรียนโดยอัตโนมัติหรือไม่?")) return;
+            
+            showToast("ฐานข้อมูล", "กำลังสั่งริเริ่มตารางระบบคลาวด์...", "gray");
+            callBackend("initializeDatabaseOnSheets")
+                .then(res => {
+                    if (res.success) {
+                        alert(res.message);
+                        showToast("สำเร็จ", "โครงสร้าง Database พร้อมใช้แล้ว", "emerald");
+                    } else {
+                        showToast("ล้มเหลว", res.message, "rose");
+                    }
+                })
+                .catch(err => showToast("ข้อผิดพลาด", "ระบบส่งคำสั่งไม่สำเร็จ", "rose"));
+        }
+
+        // 8. ส่วนแสดงผลข้อความแจ้งเตือนป๊อปอัปแบบ Custom (Toast UI)
+        function showToast(title, msg, type = "emerald") {
+            const toast = document.getElementById('toastNotification');
+            const iconEl = document.getElementById('toastIcon');
+            
+            document.getElementById('toastTitle').innerText = title;
+            document.getElementById('toastMsg').innerText = msg;
+
+            // กำหนดสีตามประเภทของข้อความ
+            if (type === "rose") {
+                iconEl.className = "text-rose-500";
+                iconEl.innerHTML = `<i data-lucide="x-circle" class="w-6 h-6"></i>`;
+            } else if (type === "amber") {
+                iconEl.className = "text-amber-500";
+                iconEl.innerHTML = `<i data-lucide="alert-triangle" class="w-6 h-6"></i>`;
+            } else if (type === "gray") {
+                iconEl.className = "text-gray-400";
+                iconEl.innerHTML = `<i data-lucide="loader" class="w-6 h-6 animate-spin"></i>`;
+            } else {
+                iconEl.className = "text-emerald-400";
+                iconEl.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6"></i>`;
+            }
+
+            lucide.createIcons();
+
+            toast.classList.remove('opacity-0', 'translate-y-10');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-10');
+            }, 4000);
+        }
 
         
     </script>
